@@ -12,11 +12,12 @@ feature -- Explore Zurich
 	add_public_transport
 			-- Add a public transportation unit per line.
 		do
-			across
-				Zurich.lines as i
-			loop
-				i.item.add_transport
-			end
+		across
+			Zurich.lines as i
+		loop
+			i.item.add_transport
+		end
+
 		end
 
 	update_transport_display (t: PUBLIC_TRANSPORT)
@@ -24,59 +25,92 @@ feature -- Explore Zurich
 		require
 			t_exists: t /= Void
 		local
-			i: INTEGER
 			s: STATION
+			i, time: INTEGER
+			last_three: BOOLEAN
 		do
-			console.clear
-			console.append_line (t.line.number.out + " Willkommen/Welcome")
+			Console.output ("Welcome")
 			from
-				i := 1
-				s := t.arriving
+				s:= Zurich.station (t.departed.name)
 			until
-				i > 3 or s = Void
+				last_three or else i= 3
 			loop
-				console.append_line (stop_info (t, s))
-				s := t.line.next_station (s, t.destination)
-				i := i + 1
-			end
-			if s /= Void then
-				if s /= t.destination then
-					console.append_line ("...")
+				s:= Zurich.line (t.line.number).next_station (s, t.destination)
+				time:= t.time_to_station (s)//60
+
+				if time=0 then
+					Console.append_line ("<1 Min.%T" + Zurich.station (s.name).name + stop_info(t,s))
+				else
+					Console.append_line (time.out + "Min.%T" + Zurich.station (s.name).name + stop_info(t,s))
 				end
-				console.append_line (stop_info (t, t.destination))
+			--	Console.append_line ( "%T" + stop_info(t,s))
+				if s ~ t.destination then
+					last_three:= True
+				end
+				i:= i + 1
 			end
+			If not last_three then
+				time:= t.time_to_station (t.destination)//60
+				Console.append_line ("...")
+				if time=0 then
+					Console.append_line ("<1 Min.%T" + Zurich.station (t.destination.name).name + stop_info(t,t.destination))
+				else
+					Console.append_line (time.out + "Min.%T" + Zurich.station (t.destination.name).name + stop_info(t,t.destination))
+				end
+			end
+
 		end
 
-	stop_info (t: PUBLIC_TRANSPORT; s: STATION): STRING
-			-- Information about stop `s' of transportation unit `t'.
+	stop_info (t: PUBLIC_TRANSPORT; s:STATION): STRING
 		require
 			t_exists: t /= Void
-			s_on_line: t.line.has_station (s)
+			s_exists: s /= Void
 		local
-			time_min: INTEGER
-			l: LINE
+			pre_station, post_station: STATION
+			station1,station2: STATION
+			connections: STRING
+			condition1, condition2: BOOLEAN
+			i: like Zurich.lines.new_cursor
 		do
-			time_min := t.time_to_station (s) // 60
-			if time_min = 0 then
-				Result := "<1"
+			connections:= "%T"
+			if t.is_towards_last then
+				pre_station:= Zurich.line (t.line.number).next_station (s, t.line.first)
 			else
-				Result := time_min.out
+				pre_station:= Zurich.line (t.line.number).next_station (s, t.line.last)
 			end
-			Result := Result + "  Min.%T" + s.name			
-			
-			-- Optional task:
-			across
-				s.lines as i
+			post_station:= Zurich.line (t.line.number).next_station (s, t.destination)
+
+			from
+				i:= Zurich.station (s.name).lines.new_cursor
+			until
+				i.after
 			loop
-				l := i.item
-				if l /= t.line and
-					((l.next_station (s, l.first) /= Void and not
-						t.line.has_station (l.next_station (s, l.first))) or
-					(l.next_station (s, l.last) /= Void and not
-						t.line.has_station (l.next_station (s, l.last)))) then
-					Result := Result + " " + i.item.number.out
+				if not(s ~ i.item.first) then
+					station1:= i.item.next_station (s, i.item.first)
+				else
+					station1:= i.item.first
 				end
+				if not(s ~ i.item.last) then
+					station2:= i.item.next_station (s, i.item.last)
+				else
+					station2:= i.item.last
+				end
+
+				if not (i.item ~ t.line) then
+					if (not (pre_station ~ station1) and not (pre_station ~ station2))
+				 	or else (not (post_station ~ station1) and not (post_station ~ station2))then
+
+						if  post_station /= Void or else (post_station = Void and
+						(not (t.line.has_station (station1))or else not(t.line.has_station (station2)))) then
+							connections:= connections + i.item.number.out + " "
+						end
+					end
+				end
+
+				i.forth
 			end
+			result:= connections
+
 		end
 
 end
